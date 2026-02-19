@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Environment / build artifacts
+env/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Local data / outputs
+jobs/
+tmp/
+results/
+data/
+claude_outputs/
+reports/
+templates/
+tests/
+
+# Pipeline state
+.pipeline/
+.claude/
+.gemini/
+
+# Repository (cloned inside Docker instead)
+repo/
+
+# Docs
+*.md
+!configs/**/*.md
