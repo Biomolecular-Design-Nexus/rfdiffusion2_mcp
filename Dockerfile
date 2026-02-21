@@ -127,9 +127,13 @@ RUN mkdir -p env/bin && ln -s /opt/conda/bin/python env/bin/python
 # 8. Copy MCP server source and supporting files
 # --------------------------------------------------------------------------
 COPY src/ ./src/
+RUN chmod -R a+r /app/src/
 COPY scripts/ ./scripts/
+RUN chmod -R a+r /app/scripts/
 COPY configs/ ./configs/
+RUN chmod -R a+r /app/configs/
 COPY examples/ ./examples/
+RUN chmod -R a+r /app/examples/
 
 RUN mkdir -p jobs tmp/inputs tmp/outputs
 
