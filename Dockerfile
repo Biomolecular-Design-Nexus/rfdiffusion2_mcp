@@ -8,6 +8,11 @@
 #
 # Build:  docker build -t rfdiffusion2-mcp .
 # Run:    docker run --gpus all -p 8000:8000 rfdiffusion2-mcp
+#
+# NOTE: RFdiffusion2 (baker-laboratory/RFdiffusion2) is a private repository.
+#       For local builds: clone it into repo/RFdiffusion2/ before building.
+#         git clone https://github.com/baker-laboratory/RFdiffusion2.git repo/RFdiffusion2
+#       For CI builds: the image builds without RFdiffusion2 source and weights.
 # ==============================================================================
 
 FROM pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
@@ -16,29 +21,17 @@ FROM pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-    git wget curl libgomp1 \
+    git wget curl libgomp1 build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # --------------------------------------------------------------------------
-# 1. Clone RFdiffusion2 repository (with retries for network resilience)
+# 1. Copy local RFdiffusion2 repo if available in build context
+#    For local builds: clone into repo/RFdiffusion2/ before docker build
+#    For CI builds: repo/ is empty (gitignored), steps below are skipped
 # --------------------------------------------------------------------------
-RUN mkdir -p repo && \
-    for attempt in 1 2 3; do \
-      echo "Clone attempt $attempt/3"; \
-      git clone --depth 1 --single-branch \
-        https://github.com/baker-laboratory/RFdiffusion2.git repo/RFdiffusion2 && break; \
-      if [ $attempt -lt 3 ]; then \
-        echo "Clone failed, waiting 5 seconds before retry..."; \
-        sleep 5; \
-      else \
-        echo "ERROR: Failed to clone RFdiffusion2 after 3 attempts"; \
-        echo "Please check internet connection or visit: https://github.com/baker-laboratory/RFdiffusion2"; \
-        exit 1; \
-      fi; \
-    done && \
-    chmod -R a+r /app/repo/
+RUN mkdir -p repo
 
 # --------------------------------------------------------------------------
 # 2. Install PyTorch Geometric / graph dependencies (CUDA 12.1)
@@ -99,28 +92,37 @@ RUN pip install --no-cache-dir --ignore-installed fastmcp
 RUN pip install --no-cache-dir -U cryptography certifi
 
 # --------------------------------------------------------------------------
-# 5. Install RFdiffusion2 package (editable)
+# 5. Install RFdiffusion2 package (if repo is available)
 # --------------------------------------------------------------------------
-RUN cd repo/RFdiffusion2 && pip install --no-cache-dir -e .
+RUN if [ -d repo/RFdiffusion2 ]; then \
+      echo "Installing RFdiffusion2 package..."; \
+      cd repo/RFdiffusion2 && pip install --no-cache-dir -e .; \
+    else \
+      echo "WARNING: repo/RFdiffusion2 not found. Skipping package install."; \
+      echo "For local builds, clone it first: git clone https://github.com/baker-laboratory/RFdiffusion2.git repo/RFdiffusion2"; \
+    fi
 
 # --------------------------------------------------------------------------
-# 6. Pre-download model weights / checkpoints into the image
-#    This avoids repetitive downloading at runtime.
+# 6. Pre-download model weights (if repo is available)
 # --------------------------------------------------------------------------
-RUN mkdir -p repo/RFdiffusion2/rf_diffusion/model_weights \
-             repo/RFdiffusion2/rf_diffusion/third_party_model_weights/ligand_mpnn \
-    && wget -q --show-progress \
-       https://files.ipd.uw.edu/pub/rfdiffusion2/model_weights/RFD_173.pt \
-       -O repo/RFdiffusion2/rf_diffusion/model_weights/RFD_173.pt \
-    && wget -q --show-progress \
-       https://files.ipd.uw.edu/pub/rfdiffusion2/model_weights/RFD_140.pt \
-       -O repo/RFdiffusion2/rf_diffusion/model_weights/RFD_140.pt \
-    && wget -q --show-progress \
-       https://files.ipd.uw.edu/pub/rfdiffusion2/third_party_model_weights/ligand_mpnn/s25_r010_t300_p.pt \
-       -O repo/RFdiffusion2/rf_diffusion/third_party_model_weights/ligand_mpnn/s25_r010_t300_p.pt \
-    && wget -q --show-progress \
-       https://files.ipd.uw.edu/pub/rfdiffusion2/third_party_model_weights/ligand_mpnn/s_300756.pt \
-       -O repo/RFdiffusion2/rf_diffusion/third_party_model_weights/ligand_mpnn/s_300756.pt
+RUN if [ -d repo/RFdiffusion2 ]; then \
+      mkdir -p repo/RFdiffusion2/rf_diffusion/model_weights \
+               repo/RFdiffusion2/rf_diffusion/third_party_model_weights/ligand_mpnn \
+      && wget -q --show-progress \
+         https://files.ipd.uw.edu/pub/rfdiffusion2/model_weights/RFD_173.pt \
+         -O repo/RFdiffusion2/rf_diffusion/model_weights/RFD_173.pt \
+      && wget -q --show-progress \
+         https://files.ipd.uw.edu/pub/rfdiffusion2/model_weights/RFD_140.pt \
+         -O repo/RFdiffusion2/rf_diffusion/model_weights/RFD_140.pt \
+      && wget -q --show-progress \
+         https://files.ipd.uw.edu/pub/rfdiffusion2/third_party_model_weights/ligand_mpnn/s25_r010_t300_p.pt \
+         -O repo/RFdiffusion2/rf_diffusion/third_party_model_weights/ligand_mpnn/s25_r010_t300_p.pt \
+      && wget -q --show-progress \
+         https://files.ipd.uw.edu/pub/rfdiffusion2/third_party_model_weights/ligand_mpnn/s_300756.pt \
+         -O repo/RFdiffusion2/rf_diffusion/third_party_model_weights/ligand_mpnn/s_300756.pt; \
+    else \
+      echo "WARNING: Skipping model weight downloads (repo/RFdiffusion2 not found)."; \
+    fi
 
 # --------------------------------------------------------------------------
 # 7. Create mamba wrapper for job manager compatibility
